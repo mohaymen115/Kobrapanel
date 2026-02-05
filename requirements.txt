@@ -1,4 +1,3 @@
-telethon
-flask
-requests
-re
+telethon==1.42.0
+flask==3.1.2
+requests==2.32.5
