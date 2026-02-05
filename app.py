@@ -1,71 +1,58 @@
 import asyncio
-import os
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
 from telethon import TelegramClient
-from telethon.tl.functions.messages import GetHistoryRequest
 
-# ================== CONFIG ==================
+# ============== CONFIG ==============
 API_ID = 38077264
 API_HASH = "4dac72033d68a6bab7586e67edb182ae"
 
+SESSION_NAME = "selva_session"
+
 # 👇 ID القناة (لازم يبدأ بـ -100)
-CHANNEL = -1003808609180   # <-- عدّل هنا
+CHANNEL = -1003808609180   # عدّل هنا فقط
 
-SESSION = "selva_session"
-
-SITE_PASSWORD = "selvapanel"        # 🔐 باسورد الموقع
-REFRESH_SECONDS = 10          # ⏱ تحديث تلقائي
-FILTER_TEXT = "Auto-delete in 5 min"  # 🔎 فلترة
-# ===========================================
+REFRESH_SECONDS = 15
+SITE_PASSWORD = "selva1"
+# ====================================
 
 app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-client = TelegramClient(SESSION, API_ID, API_HASH)
+client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 messages_cache = []
 
-# ================== TELETHON ==================
-async def update_messages():
+# ============== TELETHON LOOP ==============
+async def fetch_messages():
     global messages_cache
+
+    print("🚀 Starting Telethon...")
     await client.start()
+    print("✅ Logged in")
+
     channel = await client.get_entity(CHANNEL)
+    print("📢 Channel loaded")
 
     while True:
-        history = await client(GetHistoryRequest(
-            peer=channel,
-            limit=300,
-            offset_date=None,
-            offset_id=0,
-            max_id=0,
-            min_id=0,
-            add_offset=0,
-            hash=0
-        ))
+        msgs = await client.get_messages(channel, limit=100)
+        messages_cache = []
 
-        messages_cache = [
-            m.message for m in history.messages
-            if m.message and FILTER_TEXT in m.message
-        ]
+        for m in msgs:
+            if m.message:
+                messages_cache.append(m.message)
 
+        print("📨 Messages:", len(messages_cache))
         await asyncio.sleep(REFRESH_SECONDS)
 
 @app.on_event("startup")
 async def startup():
-    asyncio.create_task(update_messages())
+    asyncio.create_task(fetch_messages())
 
-# ================== AUTH ==================
+# ============== AUTH ==============
 @app.post("/login")
 async def login(password: str = Form(...)):
     return {"ok": password == SITE_PASSWORD}
 
-# ================== SEARCH ==================
+# ============== SEARCH ==============
 @app.get("/search")
 def search(last3: str):
     results = []
@@ -74,7 +61,15 @@ def search(last3: str):
             results.append(msg)
     return {"results": results}
 
-# ================== FRONTEND ==================
+# ============== DEBUG ==============
+@app.get("/debug")
+def debug():
+    return {
+        "count": len(messages_cache),
+        "sample": messages_cache[:5]
+    }
+
+# ============== FRONTEND ==============
 @app.get("/", response_class=HTMLResponse)
 def index():
     return """
@@ -84,7 +79,7 @@ def index():
 <title>SELVA Massage ⚡</title>
 <style>
 body{margin:0;font-family:Segoe UI;background:radial-gradient(circle,#111,#000);color:#fff;text-align:center}
-#splash,#login{position:fixed;inset:0;background:black;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:10}
+#splash,#login{position:fixed;inset:0;background:black;display:flex;flex-direction:column;justify-content:center;align-items:center}
 #splash img{width:140px;height:140px;border-radius:50%;box-shadow:0 0 30px #00f6ff}
 h1{letter-spacing:6px}
 #main{display:none;padding:30px}
@@ -93,6 +88,7 @@ button{background:#00f6ff;font-weight:bold;cursor:pointer}
 .msg{background:#111;margin:15px auto;padding:15px;width:80%;border-radius:10px;box-shadow:0 0 15px #00f6ff44}
 </style>
 </head>
+
 <body>
 
 <div id="splash">
@@ -116,34 +112,33 @@ button{background:#00f6ff;font-weight:bold;cursor:pointer}
 
 <script>
 setTimeout(()=>{
-  document.getElementById("splash").style.display="none";
-  document.getElementById("login").style.display="flex";
+  splash.style.display="none";
+  login.style.display="flex";
 },5000);
 
 function login(){
   fetch("/login",{method:"POST",
     headers:{"Content-Type":"application/x-www-form-urlencoded"},
-    body:"password="+document.getElementById("pass").value})
+    body:"password="+pass.value})
   .then(r=>r.json()).then(d=>{
     if(d.ok){
-      document.getElementById("login").style.display="none";
-      document.getElementById("main").style.display="block";
+      login.style.display="none";
+      main.style.display="block";
     }else{
-      document.getElementById("err").innerText="Wrong password";
+      err.innerText="Wrong password";
     }
   });
 }
 
 function search(){
-  fetch("/search?last3="+document.getElementById("last3").value)
+  fetch("/search?last3="+last3.value)
   .then(r=>r.json()).then(d=>{
-    let box=document.getElementById("results");
-    box.innerHTML="";
+    results.innerHTML="";
     if(d.results.length===0){
-      box.innerHTML="<p>لا توجد نتائج</p>";
+      results.innerHTML="<p>لا توجد نتائج</p>";
     }
     d.results.forEach(m=>{
-      box.innerHTML+=`<div class="msg">${m}</div>`;
+      results.innerHTML+=`<div class="msg">${m}</div>`;
     });
   });
 }
