@@ -1,21 +1,24 @@
 import asyncio
+import os
 from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from telethon import TelegramClient
 from telethon.tl.functions.messages import GetHistoryRequest
 
-# ================= CONFIG =================
-API_ID = 38077264            # <-- api_id
-API_HASH = "4dac72033d68a6bab7586e67edb182ae"   # <-- api_hash
-CHANNEL = "https://t.me/ie_zy"  # قناة انت مالكها
+# ================== CONFIG ==================
+API_ID = 38077264
+API_HASH = "4dac72033d68a6bab7586e67edb182ae"
+
+# 👇 ID القناة (لازم يبدأ بـ -100)
+CHANNEL = -1003808609180   # <-- عدّل هنا
+
 SESSION = "selva_session"
 
-SITE_PASSWORD = "selvapanel"     # 🔐 باسورد الموقع
-REFRESH_SECONDS = 10       # ⏱ تحديث تلقائي
-
-FILTER_TEXT = "Auto-delete in 5 min"
-# =========================================
+SITE_PASSWORD = "selvapanel"        # 🔐 باسورد الموقع
+REFRESH_SECONDS = 10          # ⏱ تحديث تلقائي
+FILTER_TEXT = "Auto-delete in 5 min"  # 🔎 فلترة
+# ===========================================
 
 app = FastAPI()
 app.add_middleware(
@@ -28,7 +31,7 @@ app.add_middleware(
 client = TelegramClient(SESSION, API_ID, API_HASH)
 messages_cache = []
 
-# ============ TELETHON LOOP ============
+# ================== TELETHON ==================
 async def update_messages():
     global messages_cache
     await client.start()
@@ -57,21 +60,21 @@ async def update_messages():
 async def startup():
     asyncio.create_task(update_messages())
 
-# ============ AUTH ============
+# ================== AUTH ==================
 @app.post("/login")
 async def login(password: str = Form(...)):
     return {"ok": password == SITE_PASSWORD}
 
-# ============ SEARCH ============
+# ================== SEARCH ==================
 @app.get("/search")
 def search(last3: str):
     results = []
     for msg in messages_cache:
-        if msg.strip()[-3:] == last3:
+        if len(msg.strip()) >= 3 and msg.strip()[-3:] == last3:
             results.append(msg)
     return {"results": results}
 
-# ============ FRONT ============
+# ================== FRONTEND ==================
 @app.get("/", response_class=HTMLResponse)
 def index():
     return """
@@ -113,29 +116,36 @@ button{background:#00f6ff;font-weight:bold;cursor:pointer}
 
 <script>
 setTimeout(()=>{
-document.getElementById("splash").style.display="none";
-document.getElementById("login").style.display="flex";
+  document.getElementById("splash").style.display="none";
+  document.getElementById("login").style.display="flex";
 },5000);
 
 function login(){
-fetch("/login",{method:"POST",
-headers:{"Content-Type":"application/x-www-form-urlencoded"},
-body:"password="+document.getElementById("pass").value})
-.then(r=>r.json()).then(d=>{
-if(d.ok){
-loginBox.style.display="none";
-main.style.display="block";
-}else{err.innerText="Wrong password";}
-});
+  fetch("/login",{method:"POST",
+    headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body:"password="+document.getElementById("pass").value})
+  .then(r=>r.json()).then(d=>{
+    if(d.ok){
+      document.getElementById("login").style.display="none";
+      document.getElementById("main").style.display="block";
+    }else{
+      document.getElementById("err").innerText="Wrong password";
+    }
+  });
 }
 
 function search(){
-fetch("/search?last3="+last3.value)
-.then(r=>r.json()).then(d=>{
-results.innerHTML="";
-if(d.results.length==0) results.innerHTML="<p>لا توجد نتائج</p>";
-d.results.forEach(m=>results.innerHTML+=`<div class="msg">${m}</div>`);
-});
+  fetch("/search?last3="+document.getElementById("last3").value)
+  .then(r=>r.json()).then(d=>{
+    let box=document.getElementById("results");
+    box.innerHTML="";
+    if(d.results.length===0){
+      box.innerHTML="<p>لا توجد نتائج</p>";
+    }
+    d.results.forEach(m=>{
+      box.innerHTML+=`<div class="msg">${m}</div>`;
+    });
+  });
 }
 </script>
 
