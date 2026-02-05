@@ -1,2 +1,6 @@
+telethon
 flask
-telethon 
+requests
+asyncio
+threading
+re
