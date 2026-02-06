@@ -9,7 +9,7 @@ API_ID = 38077264
 API_HASH = "4dac72033d68a6bab7586e67edb182ae"
 SESSION_NAME = "selva_session"
 
-CHANNEL_ID = -1001234567890   # <-- غير ID القناة هنا فقط
+CHANNEL_ID = -1003808609180  # <-- غير ID القناة هنا فقط
 
 FILTER_TEXT = "Auto-delete in 5 min"
 PASSWORD = "selva1"
