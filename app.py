@@ -118,9 +118,6 @@ async def run():
     await client.start()
     ch = await client.get_entity(CHANNEL_ID)
 
-    async for m in client.iter_messages(ch, limit=500):
-        process(m.text)
-
     @client.on(events.NewMessage(chats=ch))
     async def handler(e):
         process(e.raw_text)
@@ -154,53 +151,67 @@ def login(password: str = Form(...)):
 def home(req: Request):
     if not authed(req):
         return RedirectResponse("/login", 302)
-
     return """
 <!DOCTYPE html>
 <html>
-<body style="background:#000;color:#fff">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{margin:0;background:#000;color:#fff;font-family:sans-serif}
+#top{display:flex;gap:10px;overflow-x:auto;padding:10px;border-bottom:1px solid #222}
+.btn{padding:8px 14px;background:#1a1a1a;border-radius:20px;cursor:pointer;white-space:nowrap}
+.msg{background:#151515;margin:15px;padding:20px;border-radius:12px;font-size:16px;line-height:1.5}
+.copy-btn{background:#333;color:#fff;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;margin-left:10px}
+</style>
+</head>
+<body>
 <div id="top"></div>
 <div id="msgs"></div>
 
 <script>
-async function load(){
- let d=await fetch('/api').then(r=>r.json())
- let top=document.getElementById('top')
- let msgs=document.getElementById('msgs')
- top.innerHTML=''
- msgs.innerHTML=''
+let lastCount=0
+async function update(){
+    const data=await fetch('/api').then(r=>r.json())
+    const msgs=document.getElementById('msgs')
+    const top=document.getElementById('top')
 
- let all=document.createElement('button')
- all.innerText='All'
- all.onclick=()=>render(d)
- top.appendChild(all)
+    // تحديث الشريط العلوي
+    top.innerHTML=''
+    const all=document.createElement('div')
+    all.className='btn'
+    all.innerText='All'
+    all.onclick=()=>renderMessages(data)
+    top.appendChild(all)
 
- let map={}
- d.forEach(x=>map[x.code]=x.country+' '+x.flag)
- for(let k in map){
-  let b=document.createElement('button')
-  b.innerText=map[k]
-  b.onclick=()=>render(d.filter(x=>x.code==k))
-  top.appendChild(b)
- }
+    const map={}
+    data.forEach(m=>map[m.code]=m.country+' '+m.flag)
+    for(const c in map){
+        const b=document.createElement('div')
+        b.className='btn'
+        b.innerText=map[c]
+        b.onclick=()=>renderMessages(data.filter(x=>x.code===c))
+        top.appendChild(b)
+    }
 
- render(d)
-
- function render(arr){
-  msgs.innerHTML=''
-  arr.forEach(m=>{
-   let div=document.createElement('div')
-   div.style.border='1px solid #333'
-   div.style.margin='10px'
-   div.style.padding='10px'
-   div.innerHTML = m.text + 
-   ' <button onclick="navigator.clipboard.writeText(`'+m.text+'`)">نسخ</button>'
-   msgs.appendChild(div)
-  })
- }
+    // فقط الرسائل الجديدة
+    if(data.length>lastCount){
+        renderMessages(data.slice(lastCount))
+        lastCount=data.length
+    }
 }
-setInterval(load,2000)
-load()
+
+function renderMessages(arr){
+    const msgs=document.getElementById('msgs')
+    arr.forEach(m=>{
+        const d=document.createElement('div')
+        d.className='msg'
+        d.innerHTML = `<span>${m.text}</span> <button class="copy-btn" onclick="navigator.clipboard.writeText(\`${m.text}\`)">نسخ</button>`
+        msgs.appendChild(d)
+    })
+}
+
+setInterval(update,2000)
+update()
 </script>
 </body>
 </html>
