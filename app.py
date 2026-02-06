@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import FastAPI, Request, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from telethon import TelegramClient, events
 import uvicorn
@@ -17,12 +17,14 @@ COOKIE_AGE = 60 * 60 * 24 * 7
 IGNORE = (
     "⚠️ Access Denied",
     "✅ Verification Successful!",
-    "Hey there"
+    "Welcome!",
+    "Type /start",
+    "You must join",
+    "Please join"
 )
 
-# ================== COUNTRIES (كاملة) ==================
+# ================== COUNTRIES ==================
 COUNTRIES = {
-    # NANP خاص
     "+1-876": ("Jamaica", "🇯🇲"),
     "+1-868": ("Trinidad and Tobago", "🇹🇹"),
     "+1-809": ("Dominican Republic", "🇩🇴"),
@@ -38,12 +40,10 @@ COUNTRIES = {
     "+1-664": ("Montserrat", "🇲🇸"),
     "+1-721": ("Sint Maarten", "🇸🇽"),
     "+1-758": ("Saint Lucia", "🇱🇨"),
-    "+1-784": ("Saint Vincent and the Grenadines", "🇻🇨"),
+    "+1-784": ("Saint Vincent", "🇻🇨"),
     "+1-787": ("Puerto Rico", "🇵🇷"),
     "+1-939": ("Puerto Rico", "🇵🇷"),
-
-    # الشرق الأوسط
-    "+971": ("United Arab Emirates", "🇦🇪"),
+    "+971": ("UAE", "🇦🇪"),
     "+966": ("Saudi Arabia", "🇸🇦"),
     "+968": ("Oman", "🇴🇲"),
     "+974": ("Qatar", "🇶🇦"),
@@ -56,143 +56,30 @@ COUNTRIES = {
     "+970": ("Palestine", "🇵🇸"),
     "+972": ("Israel", "🇮🇱"),
     "+967": ("Yemen", "🇾🇪"),
-    "+98":  ("Iran", "🇮🇷"),
-
-    # أفريقيا
+    "+98": ("Iran", "🇮🇷"),
     "+212": ("Morocco", "🇲🇦"),
     "+213": ("Algeria", "🇩🇿"),
     "+216": ("Tunisia", "🇹🇳"),
-    "+20":  ("Egypt", "🇪🇬"),
-    "+249": ("Sudan", "🇸🇩"),
-    "+251": ("Ethiopia", "🇪🇹"),
-    "+252": ("Somalia", "🇸🇴"),
-    "+253": ("Djibouti", "🇩🇯"),
-    "+254": ("Kenya", "🇰🇪"),
-    "+255": ("Tanzania", "🇹🇿"),
-    "+256": ("Uganda", "🇺🇬"),
-    "+257": ("Burundi", "🇧🇮"),
-    "+258": ("Mozambique", "🇲🇿"),
-    "+260": ("Zambia", "🇿🇲"),
-    "+261": ("Madagascar", "🇲🇬"),
-    "+262": ("Reunion", "🇷🇪"),
-    "+263": ("Zimbabwe", "🇿🇼"),
-    "+264": ("Namibia", "🇳🇦"),
-    "+265": ("Malawi", "🇲🇼"),
-    "+266": ("Lesotho", "🇱🇸"),
-    "+267": ("Botswana", "🇧🇼"),
-    "+268": ("Eswatini", "🇸🇿"),
-    "+269": ("Comoros", "🇰🇲"),
-    "+27":  ("South Africa", "🇿🇦"),
-    "+233": ("Ghana", "🇬🇭"),
-    "+234": ("Nigeria", "🇳🇬"),
-    "+235": ("Chad", "🇹🇩"),
-    "+236": ("Central African Republic", "🇨🇫"),
-    "+237": ("Cameroon", "🇨🇲"),
-    "+238": ("Cape Verde", "🇨🇻"),
-    "+239": ("Sao Tome and Principe", "🇸🇹"),
-    "+240": ("Equatorial Guinea", "🇬🇶"),
-    "+241": ("Gabon", "🇬🇦"),
-    "+242": ("Republic of the Congo", "🇨🇬"),
-    "+243": ("DR Congo", "🇨🇩"),
-    "+244": ("Angola", "🇦🇴"),
-    "+245": ("Guinea-Bissau", "🇬🇼"),
-    "+246": ("Diego Garcia", "🇮🇴"),
-    "+248": ("Seychelles", "🇸🇨"),
-
-    # أوروبا
-    "+44":  ("United Kingdom", "🇬🇧"),
-    "+49":  ("Germany", "🇩🇪"),
-    "+33":  ("France", "🇫🇷"),
-    "+39":  ("Italy", "🇮🇹"),
-    "+34":  ("Spain", "🇪🇸"),
-    "+351": ("Portugal", "🇵🇹"),
-    "+353": ("Ireland", "🇮🇪"),
-    "+354": ("Iceland", "🇮🇸"),
-    "+355": ("Albania", "🇦🇱"),
-    "+356": ("Malta", "🇲🇹"),
-    "+357": ("Cyprus", "🇨🇾"),
-    "+358": ("Finland", "🇫🇮"),
-    "+359": ("Bulgaria", "🇧🇬"),
-    "+36":  ("Hungary", "🇭🇺"),
-    "+370": ("Lithuania", "🇱🇹"),
-    "+371": ("Latvia", "🇱🇻"),
-    "+372": ("Estonia", "🇪🇪"),
-    "+373": ("Moldova", "🇲🇩"),
-    "+374": ("Armenia", "🇦🇲"),
-    "+375": ("Belarus", "🇧🇾"),
-    "+376": ("Andorra", "🇦🇩"),
-    "+377": ("Monaco", "🇲🇨"),
-    "+378": ("San Marino", "🇸🇲"),
-    "+380": ("Ukraine", "🇺🇦"),
-    "+381": ("Serbia", "🇷🇸"),
-    "+382": ("Montenegro", "🇲🇪"),
-    "+383": ("Kosovo", "🇽🇰"),
-    "+385": ("Croatia", "🇭🇷"),
-    "+386": ("Slovenia", "🇸🇮"),
-    "+387": ("Bosnia and Herzegovina", "🇧🇦"),
-    "+389": ("North Macedonia", "🇲🇰"),
-    "+40":  ("Romania", "🇷🇴"),
-    "+41":  ("Switzerland", "🇨🇭"),
-    "+420": ("Czech Republic", "🇨🇿"),
-    "+421": ("Slovakia", "🇸🇰"),
-    "+43":  ("Austria", "🇦🇹"),
-    "+45":  ("Denmark", "🇩🇰"),
-    "+46":  ("Sweden", "🇸🇪"),
-    "+47":  ("Norway", "🇳🇴"),
-    "+48":  ("Poland", "🇵🇱"),
-    "+90":  ("Turkey", "🇹🇷"),
-
-    # آسيا
-    "+7":   ("Russia / Kazakhstan", "🇷🇺"),
-    "+81":  ("Japan", "🇯🇵"),
-    "+82":  ("South Korea", "🇰🇷"),
-    "+84":  ("Vietnam", "🇻🇳"),
-    "+86":  ("China", "🇨🇳"),
-    "+91":  ("India", "🇮🇳"),
-    "+92":  ("Pakistan", "🇵🇰"),
-    "+93":  ("Afghanistan", "🇦🇫"),
-    "+94":  ("Sri Lanka", "🇱🇰"),
-    "+95":  ("Myanmar", "🇲🇲"),
-    "+60":  ("Malaysia", "🇲🇾"),
-    "+61":  ("Australia", "🇦🇺"),
-    "+62":  ("Indonesia", "🇮🇩"),
-    "+63":  ("Philippines", "🇵🇭"),
-    "+64":  ("New Zealand", "🇳🇿"),
-    "+65":  ("Singapore", "🇸🇬"),
-    "+66":  ("Thailand", "🇹🇭"),
+    "+20": ("Egypt", "🇪🇬"),
+    "+44": ("UK", "🇬🇧"),
+    "+49": ("Germany", "🇩🇪"),
+    "+33": ("France", "🇫🇷"),
+    "+39": ("Italy", "🇮🇹"),
+    "+34": ("Spain", "🇪🇸"),
+    "+7": ("Russia", "🇷🇺"),
+    "+81": ("Japan", "🇯🇵"),
+    "+82": ("Korea", "🇰🇷"),
+    "+84": ("Vietnam", "🇻🇳"),
+    "+86": ("China", "🇨🇳"),
+    "+91": ("India", "🇮🇳"),
+    "+92": ("Pakistan", "🇵🇰"),
+    "+60": ("Malaysia", "🇲🇾"),
+    "+61": ("Australia", "🇦🇺"),
+    "+62": ("Indonesia", "🇮🇩"),
+    "+63": ("Philippines", "🇵🇭"),
+    "+65": ("Singapore", "🇸🇬"),
+    "+66": ("Thailand", "🇹🇭"),
     "+880": ("Bangladesh", "🇧🇩"),
-    "+886": ("Taiwan", "🇹🇼"),
-    "+960": ("Maldives", "🇲🇻"),
-    "+975": ("Bhutan", "🇧🇹"),
-    "+976": ("Mongolia", "🇲🇳"),
-    "+977": ("Nepal", "🇳🇵"),
-    "+992": ("Tajikistan", "🇹🇯"),
-    "+993": ("Turkmenistan", "🇹🇲"),
-    "+994": ("Azerbaijan", "🇦🇿"),
-    "+995": ("Georgia", "🇬🇪"),
-    "+996": ("Kyrgyzstan", "🇰🇬"),
-    "+998": ("Uzbekistan", "🇺🇿"),
-
-    # الأمريكتين
-    "+52": ("Mexico", "🇲🇽"),
-    "+54": ("Argentina", "🇦🇷"),
-    "+55": ("Brazil", "🇧🇷"),
-    "+56": ("Chile", "🇨🇱"),
-    "+57": ("Colombia", "🇨🇴"),
-    "+58": ("Venezuela", "🇻🇪"),
-    "+591": ("Bolivia", "🇧🇴"),
-    "+593": ("Ecuador", "🇪🇨"),
-    "+595": ("Paraguay", "🇵🇾"),
-    "+598": ("Uruguay", "🇺🇾"),
-    "+502": ("Guatemala", "🇬🇹"),
-    "+503": ("El Salvador", "🇸🇻"),
-    "+504": ("Honduras", "🇭🇳"),
-    "+505": ("Nicaragua", "🇳🇮"),
-    "+506": ("Costa Rica", "🇨🇷"),
-    "+507": ("Panama", "🇵🇦"),
-    "+509": ("Haiti", "🇭🇹"),
-
-    # NANP عام
     "+1": ("USA / Canada", "🇺🇸"),
 }
 
@@ -202,45 +89,29 @@ app = FastAPI()
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 # ================== HELPERS ==================
-def detect_country(text: str):
-    for code in sorted(COUNTRIES, key=len, reverse=True):
-        if text.startswith(code):
-            name, flag = COUNTRIES[code]
-            return code, name, flag
+def detect_country(text):
+    for c in sorted(COUNTRIES, key=len, reverse=True):
+        if text.startswith(c):
+            return c, COUNTRIES[c][0], COUNTRIES[c][1]
     return "OTHER", "Other", "🌍"
 
-def process(text: str):
+def process(text):
     if not text:
         return
-    for i in IGNORE:
-        if text.startswith(i):
+    for x in IGNORE:
+        if text.startswith(x):
             return
     code, country, flag = detect_country(text)
-    msg = {"text": text, "code": code, "country": country, "flag": flag}
-    MESSAGES.append(msg)
-    return msg
-
-# ================== WS MANAGER ==================
-class Manager:
-    def __init__(self):
-        self.active = []
-
-    async def connect(self, ws: WebSocket):
-        await ws.accept()
-        self.active.append(ws)
-
-    def disconnect(self, ws: WebSocket):
-        self.active.remove(ws)
-
-    async def broadcast(self, msg):
-        for ws in self.active:
-            await ws.send_json(msg)
-
-manager = Manager()
+    MESSAGES.append({
+        "text": text,
+        "code": code,
+        "country": country,
+        "flag": flag
+    })
 
 # ================== TELETHON ==================
 @app.on_event("startup")
-async def startup():
+async def start():
     asyncio.create_task(run())
 
 async def run():
@@ -252,9 +123,7 @@ async def run():
 
     @client.on(events.NewMessage(chats=ch))
     async def handler(e):
-        msg = process(e.raw_text)
-        if msg:
-            await manager.broadcast(msg)
+        process(e.raw_text)
 
     await client.run_until_disconnected()
 
@@ -264,7 +133,13 @@ def authed(req: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
-    return """<form method="post"><input name="password" type="password"><button>Login</button></form>"""
+    return """
+<form method="post" style="margin:100px auto;width:300px">
+<input type="password" name="password" placeholder="Password" style="width:100%;padding:10px">
+<br><br>
+<button style="width:100%">Login</button>
+</form>
+"""
 
 @app.post("/login")
 def login(password: str = Form(...)):
@@ -288,44 +163,54 @@ def home(req: Request):
 <div id="msgs"></div>
 
 <script>
-let M=[]
-fetch("/api").then(r=>r.json()).then(d=>{
- M=d
- draw()
-})
+async function load(){
+ let d=await fetch('/api').then(r=>r.json())
+ let top=document.getElementById('top')
+ let msgs=document.getElementById('msgs')
+ top.innerHTML=''
+ msgs.innerHTML=''
 
-function draw(){
- document.getElementById("msgs").innerHTML=""
- M.forEach(x=>{
-  let d=document.createElement("div")
-  d.innerText=x.text
-  document.getElementById("msgs").appendChild(d)
- })
-}
+ let all=document.createElement('button')
+ all.innerText='All'
+ all.onclick=()=>render(d)
+ top.appendChild(all)
 
-let ws=new WebSocket("ws://"+location.host+"/ws")
-ws.onmessage=e=>{
- let m=JSON.parse(e.data)
- M.unshift(m)
- draw()
+ let map={}
+ d.forEach(x=>map[x.code]=x.country+' '+x.flag)
+ for(let k in map){
+  let b=document.createElement('button')
+  b.innerText=map[k]
+  b.onclick=()=>render(d.filter(x=>x.code==k))
+  top.appendChild(b)
+ }
+
+ render(d)
+
+ function render(arr){
+  msgs.innerHTML=''
+  arr.forEach(m=>{
+   let div=document.createElement('div')
+   div.style.border='1px solid #333'
+   div.style.margin='10px'
+   div.style.padding='10px'
+   div.innerHTML = m.text + 
+   ' <button onclick="navigator.clipboard.writeText(`'+m.text+'`)">نسخ</button>'
+   msgs.appendChild(div)
+  })
+ }
 }
+setInterval(load,2000)
+load()
 </script>
 </body>
 </html>
 """
 
+# ================== API ==================
 @app.get("/api")
 def api():
     return MESSAGES[::-1][:300]
 
-@app.websocket("/ws")
-async def ws(ws: WebSocket):
-    await manager.connect(ws)
-    try:
-        while True:
-            await ws.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(ws)
-
+# ================== RUN ==================
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
