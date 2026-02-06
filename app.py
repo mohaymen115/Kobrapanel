@@ -1,332 +1,366 @@
+import os
 import asyncio
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
-from telethon import TelegramClient
+import time
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from telethon import TelegramClient, events
+import uvicorn
 
-# ============ CONFIG ============
+# ================== TELETHON CONFIG ==================
 API_ID = 38077264
 API_HASH = "4dac72033d68a6bab7586e67edb182ae"
 SESSION_NAME = "selva_session"
+CHANNEL_ID = -1003808609180
 
-# حط ID القناة (لازم يبدأ بـ -100)
-CHANNEL_ID = -1003808609180   # <-- عدّل هنا
+# ================== AUTH ==================
+PASSWORD = "selva1"
+COOKIE_NAME = "selva_auth"
+COOKIE_AGE = 60 * 60 * 24 * 7  # 7 days
 
-REFRESH_SECONDS = 15
-# ================================
+# ================== FILTERS ==================
+IGNORE_PREFIXES = (
+    "⚠️ Access Denied",
+    "✅ Verification Successful!",
+    "Hey there"
+)
 
-# country code -> country name
-COUNTRY_CODES = {
-    "+93": "Afghanistan",
-"+355": "Albania",
-"+213": "Algeria",
-"+376": "Andorra",
-"+244": "Angola",
-"+1-268": "Antigua and Barbuda",
-"+54": "Argentina",
-"+374": "Armenia",
-"+61": "Australia",
-"+43": "Austria",
-"+994": "Azerbaijan",
-"+1-242": "Bahamas",
-"+973": "Bahrain",
-"+880": "Bangladesh",
-"+1-246": "Barbados",
-"+375": "Belarus",
-"+32": "Belgium",
-"+501": "Belize",
-"+229": "Benin",
-"+975": "Bhutan",
-"+591": "Bolivia",
-"+387": "Bosnia and Herzegovina",
-"+267": "Botswana",
-"+55": "Brazil",
-"+673": "Brunei",
-"+359": "Bulgaria",
-"+226": "Burkina Faso",
-"+257": "Burundi",
-"+238": "Cabo Verde",
-"+855": "Cambodia",
-"+237": "Cameroon",
-"+1": "Canada",
-"+236": "Central African Republic",
-"+235": "Chad",
-"+56": "Chile",
-"+86": "China",
-"+57": "Colombia",
-"+269": "Comoros",
-"+242": "Congo",
-"+243": "Congo (DRC)",
-"+506": "Costa Rica",
-"+225": "Côte d'Ivoire",
-"+385": "Croatia",
-"+53": "Cuba",
-"+357": "Cyprus",
-"+420": "Czech Republic",
-"+45": "Denmark",
-"+253": "Djibouti",
-"+1-767": "Dominica",
-"+1-809, 1-829, 1-849": "Dominican Republic",
-"+593": "Ecuador",
-"+20": "Egypt",
-"+503": "El Salvador",
-"+240": "Equatorial Guinea",
-"+291": "Eritrea",
-"+372": "Estonia",
-"+268": "Eswatini",
-"+251": "Ethiopia",
-"+679": "Fiji",
-"+358": "Finland",
-"+33": "France",
-"+241": "Gabon",
-"+220": "Gambia",
-"+995": "Georgia",
-"+49": "Germany",
-"+233": "Ghana",
-"+30": "Greece",
-"+1-473": "Grenada",
-"+502": "Guatemala",
-"+224": "Guinea",
-"+245": "Guinea-Bissau",
-"+592": "Guyana",
-"+509": "Haiti",
-"+504": "Honduras",
-"+36": "Hungary",
-"+354": "Iceland",
-"+91": "India",
-"+62": "Indonesia",
-"+98": "Iran",
-"+964": "Iraq",
-"+353": "Ireland",
-"+972": "Israel",
-"+39": "Italy",
-"+1-876": "Jamaica",
-"+81": "Japan",
-"+962": "Jordan",
-"+7": "Kazakhstan",
-"+254": "Kenya",
-"+686": "Kiribati",
-"+383": "Kosovo",
-"+965": "Kuwait",
-"+996": "Kyrgyzstan",
-"+856": "Laos",
-"+371": "Latvia",
-"+961": "Lebanon",
-"+266": "Lesotho",
-"+231": "Liberia",
-"+218": "Libya",
-"+423": "Liechtenstein",
-"+370": "Lithuania",
-"+352": "Luxembourg",
-"+261": "Madagascar",
-"+265": "Malawi",
-"+60": "Malaysia",
-"+960": "Maldives",
-"+223": "Mali",
-"+356": "Malta",
-"+692": "Marshall Islands",
-"+222": "Mauritania",
-"+230": "Mauritius",
-"+52": "Mexico",
-"+691": "Micronesia",
-"+373": "Moldova",
-"+377": "Monaco",
-"+976": "Mongolia",
-"+382": "Montenegro",
-"+212": "Morocco",
-"+258": "Mozambique",
-"+95": "Myanmar",
-"+264": "Namibia",
-"+674": "Nauru",
-"+977": "Nepal",
-"+31": "Netherlands",
-"+64": "New Zealand",
-"+505": "Nicaragua",
-"+227": "Niger",
-"+234": "Nigeria",
-"+389": "North Macedonia",
-"+850": "North Korea",
-"+47": "Norway",
-"+968": "Oman",
-"+92": "Pakistan",
-"+680": "Palau",
-"+970": "Palestine",
-"+507": "Panama",
-"+675": "Papua New Guinea",
-"+595": "Paraguay",
-"+51": "Peru",
-"+63": "Philippines",
-"+48": "Poland",
-"+351": "Portugal",
-"+974": "Qatar",
-"+40": "Romania",
-"+7": "Russia",
-"+250": "Rwanda",
-"+1-869": "Saint Kitts and Nevis",
-"+1-758": "Saint Lucia",
-"+1-784": "Saint Vincent and the Grenadines",
-"+685": "Samoa",
-"+378": "San Marino",
-"+239": "Sao Tome and Principe",
-"+966": "Saudi Arabia",
-"+221": "Senegal",
-"+381": "Serbia",
-"+248": "Seychelles",
-"+232": "Sierra Leone",
-"+65": "Singapore",
-"+421": "Slovakia",
-"+386": "Slovenia",
-"+677": "Solomon Islands",
-"+252": "Somalia",
-"+27": "South Africa",
-"+82": "South Korea",
-"+211": "South Sudan",
-"+34": "Spain",
-"+94": "Sri Lanka",
-"+249": "Sudan",
-"+597": "Suriname",
-"+46": "Sweden",
-"+41": "Switzerland",
-"+963": "Syria",
-"+886": "Taiwan",
-"+992": "Tajikistan",
-"+255": "Tanzania",
-"+66": "Thailand",
-"+670": "Timor-Leste",
-"+228": "Togo",
-"+676": "Tonga",
-"+1-868": "Trinidad and Tobago",
-"+216": "Tunisia",
-"+90": "Turkey",
-"+993": "Turkmenistan",
-"+688": "Tuvalu",
-"+256": "Uganda",
-"+380": "Ukraine",
-"+971": "United Arab Emirates",
-"+44": "United Kingdom",
-"+1": "United States",
-"+598": "Uruguay",
-"+998": "Uzbekistan",
-"+678": "Vanuatu",
-"+379, +39": "Vatican City",
-"+58": "Venezuela",
-"+84": "Vietnam",
-"+967": "Yemen",
-"+260": "Zambia",
-"+263": "Zimbabwe"
+# ================== COUNTRIES (Dial codes) ==================
+COUNTRIES ={
+    "+20": ("Egypt", "🇪🇬"),
+    "+1": ("United States", "🇺🇸"),
+    "+44": ("United Kingdom", "🇬🇧"),
+    "+33": ("France", "🇫🇷"),
+    "+49": ("Germany", "🇩🇪"),
+    "+39": ("Italy", "🇮🇹"),
+    "+34": ("Spain", "🇪🇸"),
+    "+7": ("Russia", "🇷🇺"),
+    "+81": ("Japan", "🇯🇵"),
+    "+82": ("South Korea", "🇰🇷"),
+    "+86": ("China", "🇨🇳"),
+    "+91": ("India", "🇮🇳"),
+    "+55": ("Brazil", "🇧🇷"),
+    "+52": ("Mexico", "🇲🇽"),
+    "+90": ("Turkey", "🇹🇷"),
+    "+31": ("Netherlands", "🇳🇱"),
+    "+41": ("Switzerland", "🇨🇭"),
+    "+46": ("Sweden", "🇸🇪"),
+    "+47": ("Norway", "🇳🇴"),
+    "+45": ("Denmark", "🇩🇰"),
+    "+358": ("Finland", "🇫🇮"),
+    "+32": ("Belgium", "🇧🇪"),
+    "+43": ("Austria", "🇦🇹"),
+    "+353": ("Ireland", "🇮🇪"),
+    "+351": ("Portugal", "🇵🇹"),
+    "+30": ("Greece", "🇬🇷"),
+    "+48": ("Poland", "🇵🇱"),
+    "+420": ("Czech Republic", "🇨🇿"),
+    "+36": ("Hungary", "🇭🇺"),
+    "+40": ("Romania", "🇷🇴"),
+    "+380": ("Ukraine", "🇺🇦"),
+    "+375": ("Belarus", "🇧🇾"),
+    "+60": ("Malaysia", "🇲🇾"),
+    "+62": ("Indonesia", "🇮🇩"),
+    "+63": ("Philippines", "🇵🇭"),
+    "+84": ("Vietnam", "🇻🇳"),
+    "+66": ("Thailand", "🇹🇭"),
+    "+65": ("Singapore", "🇸🇬"),
+    "+971": ("United Arab Emirates", "🇦🇪"),
+    "+966": ("Saudi Arabia", "🇸🇦"),
+    "+20": ("Egypt", "🇪🇬"),
+    "+212": ("Morocco", "🇲🇦"),
+    "+213": ("Algeria", "🇩🇿"),
+    "+216": ("Tunisia", "🇹🇳"),
+    "+961": ("Lebanon", "🇱🇧"),
+    "+962": ("Jordan", "🇯🇴"),
+    "+963": ("Syria", "🇸🇾"),
+    "+964": ("Iraq", "🇮🇶"),
+    "+965": ("Kuwait", "🇰🇼"),
+    "+966": ("Saudi Arabia", "🇸🇦"),
+    "+968": ("Oman", "🇴🇲"),
+    "+974": ("Qatar", "🇶🇦"),
+    "+973": ("Bahrain", "🇧🇭"),
+    "+967": ("Yemen", "🇾🇪"),
+    "+249": ("Sudan", "🇸🇩"),
+    "+251": ("Ethiopia", "🇪🇹"),
+    "+254": ("Kenya", "🇰🇪"),
+    "+234": ("Nigeria", "🇳🇬"),
+    "+27": ("South Africa", "🇿🇦"),
+    "+233": ("Ghana", "🇬🇭"),
+    "+225": ("Ivory Coast", "🇨🇮"),
+    "+241": ("Gabon", "🇬🇦"),
+    "+237": ("Cameroon", "🇨🇲"),
+    "+236": ("Central African Republic", "🇨🇫"),
+    "+235": ("Chad", "🇹🇩"),
+    "+243": ("DR Congo", "🇨🇩"),
+    "+242": ("Republic of the Congo", "🇨🇬"),
+    "+257": ("Burundi", "🇧🇮"),
+    "+250": ("Rwanda", "🇷🇼"),
+    "+255": ("Tanzania", "🇹🇿"),
+    "+256": ("Uganda", "🇺🇬"),
+    "+260": ("Zambia", "🇿🇲"),
+    "+263": ("Zimbabwe", "🇿🇼"),
+    "+267": ("Botswana", "🇧🇼"),
+    "+264": ("Namibia", "🇳🇦"),
+    "+258": ("Mozambique", "🇲🇿"),
+    "+261": ("Madagascar", "🇲🇬"),
+    "+230": ("Mauritius", "🇲🇺"),
+    "+248": ("Seychelles", "🇸🇨"),
+    "+269": ("Comoros", "🇰🇲"),
+    "+252": ("Somalia", "🇸🇴"),
+    "+253": ("Djibouti", "🇩🇯"),
+    "+291": ("Eritrea", "🇪🇷"),
+    "+598": ("Uruguay", "🇺🇾"),
+    "+595": ("Paraguay", "🇵🇾"),
+    "+56": ("Chile", "🇨🇱"),
+    "+51": ("Peru", "🇵🇪"),
+    "+57": ("Colombia", "🇨🇴"),
+    "+58": ("Venezuela", "🇻🇪"),
+    "+593": ("Ecuador", "🇪🇨"),
+    "+591": ("Bolivia", "🇧🇴"),
+    "+54": ("Argentina", "🇦🇷"),
+    "+506": ("Costa Rica", "🇨🇷"),
+    "+507": ("Panama", "🇵🇦"),
+    "+502": ("Guatemala", "🇬🇹"),
+    "+503": ("El Salvador", "🇸🇻"),
+    "+504": ("Honduras", "🇭🇳"),
+    "+505": ("Nicaragua", "🇳🇮"),
+    "+509": ("Haiti", "🇭🇹"),
+    "+1-876": ("Jamaica", "🇯🇲"),
+    "+1-868": ("Trinidad and Tobago", "🇹🇹"),
+    "+1-767": ("Dominica", "🇩🇲"),
+    "+1-809": ("Dominican Republic", "🇩🇴"),
+    "+1-242": ("Bahamas", "🇧🇸"),
+    "+1-246": ("Barbados", "🇧🇧"),
+    "+1-284": ("British Virgin Islands", "🇻🇬"),
+    "+1-345": ("Cayman Islands", "🇰🇾"),
+    "+61": ("Australia", "🇦🇺"),
+    "+64": ("New Zealand", "🇳🇿"),
+    "+679": ("Fiji", "🇫🇯"),
+    "+675": ("Papua New Guinea", "🇵🇬"),
+    "+677": ("Solomon Islands", "🇸🇧"),
+    "+682": ("Cook Islands", "🇨🇰"),
+    "+685": ("Samoa", "🇼🇸"),
+    "+686": ("Kiribati", "🇰🇮"),
+    "+687": ("New Caledonia", "🇳🇨"),
+    "+689": ("French Polynesia", "🇵🇫"),
+    "+850": ("North Korea", "🇰🇵"),
+    "+92": ("Pakistan", "🇵🇰"),
+    "+93": ("Afghanistan", "🇦🇫"),
+    "+94": ("Sri Lanka", "🇱🇰"),
+    "+95": ("Myanmar", "🇲🇲"),
+    "+98": ("Iran", "🇮🇷"),
+    "+960": ("Maldives", "🇲🇻"),
+    "+961": ("Lebanon", "🇱🇧"),
+    "+962": ("Jordan", "🇯🇴"),
+    "+963": ("Syria", "🇸🇾"),
+    "+964": ("Iraq", "🇮🇶"),
+    "+965": ("Kuwait", "🇰🇼"),
+    "+966": ("Saudi Arabia", "🇸🇦"),
+    "+967": ("Yemen", "🇾🇪"),
+    "+968": ("Oman", "🇴🇲"),
+    "+970": ("Palestine", "🇵🇸"),
+    "+972": ("Israel", "🇮🇱"),
+    "+973": ("Bahrain", "🇧🇭"),
+    "+974": ("Qatar", "🇶🇦"),
+    "+975": ("Bhutan", "🇧🇹"),
+    "+976": ("Mongolia", "🇲🇳"),
+    "+977": ("Nepal", "🇳🇵"),
+    "+992": ("Tajikistan", "🇹🇯"),
+    "+993": ("Turkmenistan", "🇹🇲"),
+    "+994": ("Azerbaijan", "🇦🇿"),
+    "+995": ("Georgia", "🇬🇪"),
+    "+996": ("Kyrgyzstan", "🇰🇬"),
+    "+998": ("Uzbekistan", "🇺🇿"),
+    "+376": ("Andorra", "🇦🇩"),
+    "+355": ("Albania", "🇦🇱"),
+    "+374": ("Armenia", "🇦🇲"),
+    "+387": ("Bosnia and Herzegovina", "🇧🇦"),
+    "+359": ("Bulgaria", "🇧🇬"),
+    "+385": ("Croatia", "🇭🇷"),
+    "+357": ("Cyprus", "🇨🇾"),
+    "+372": ("Estonia", "🇪🇪"),
+    "+298": ("Faroe Islands", "🇫🇴"),
+    "+995": ("Georgia", "🇬🇪"),
+    "+350": ("Gibraltar", "🇬🇮"),
+    "+299": ("Greenland", "🇬🇱"),
+    "+354": ("Iceland", "🇮🇸"),
+    "+353": ("Ireland", "🇮🇪"),
+    "+370": ("Lithuania", "🇱🇹"),
+    "+352": ("Luxembourg", "🇱🇺"),
+    "+356": ("Malta", "🇲🇹"),
+    "+373": ("Moldova", "🇲🇩"),
+    "+377": ("Monaco", "🇲🇨"),
+    "+382": ("Montenegro", "🇲🇪"),
+    "+389": ("North Macedonia", "🇲🇰"),
+    "+47": ("Norway", "🇳🇴"),
+    "+378": ("San Marino", "🇸🇲"),
+    "+381": ("Serbia", "🇷🇸"),
+    "+421": ("Slovakia", "🇸🇰"),
+    "+386": ("Slovenia", "🇸🇮"),
+    "+46": ("Sweden", "🇸🇪"),
+    "+41": ("Switzerland", "🇨🇭"),
+    "+90": ("Turkey", "🇹🇷"),
+    "+380": ("Ukraine", "🇺🇦"),
+    "+39": ("Vatican City", "🇻🇦"),
+    "+58": ("Venezuela", "🇻🇪"),
 }
 
+MESSAGES = []
+
+# ================== APP ==================
 app = FastAPI()
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
-# { "Egypt": [msg1, msg2], "Venezuela": [...] }
-messages_by_country = {}
+def detect_country(text):
+    for code, (name, flag) in COUNTRIES.items():
+        if text.strip().startswith(code):
+            return code, name, flag
+    return None, "Unknown", "🌍"
 
-# ============ TELETHON ============
-async def fetch_messages():
-    global messages_by_country
-
-    print("🚀 Telethon starting...")
-    await client.start()
-    channel = await client.get_entity(CHANNEL_ID)
-    print("✅ Channel loaded")
-
-    while True:
-        msgs = await client.get_messages(channel, limit=200)
-        messages_by_country = {}
-
-        for m in msgs:
-            if not m.message:
-                continue
-
-            text = m.message.strip()
-            for code, country in COUNTRY_CODES.items():
-                if text.startswith(code):
-                    messages_by_country.setdefault(country, []).append(text)
-
-        print("📨 Countries:", list(messages_by_country.keys()))
-        await asyncio.sleep(REFRESH_SECONDS)
-
+# ================== TELETHON START ==================
 @app.on_event("startup")
 async def startup():
-    asyncio.create_task(fetch_messages())
+    asyncio.create_task(start_telethon())
 
-# ============ API ============
-@app.get("/countries")
-def countries():
-    return list(messages_by_country.keys())
+async def start_telethon():
+    await client.start()
+    channel = await client.get_entity(CHANNEL_ID)
 
-@app.get("/messages/{country}")
-def get_messages(country: str):
-    return messages_by_country.get(country, [])
+    @client.on(events.NewMessage(chats=channel))
+    async def handler(event):
+        text = event.raw_text or ""
 
-# ============ FRONTEND ============
-@app.get("/", response_class=HTMLResponse)
-def index():
+        for p in IGNORE_PREFIXES:
+            if text.startswith(p):
+                return
+
+        code, country, flag = detect_country(text)
+
+        MESSAGES.append({
+            "text": text,
+            "code": code,
+            "country": country,
+            "flag": flag
+        })
+
+    await client.run_until_disconnected()
+
+# ================== AUTH CHECK ==================
+def is_authed(request: Request):
+    return request.cookies.get(COOKIE_NAME) == "1"
+
+# ================== LOGIN ==================
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
     return """
 <!DOCTYPE html>
 <html>
 <head>
-<title>SELVA Massage ⚡</title>
+<title>Login</title>
 <style>
-body{margin:0;font-family:Segoe UI;background:#000;color:#fff}
-#splash{position:fixed;inset:0;background:black;display:flex;
-flex-direction:column;justify-content:center;align-items:center;z-index:10}
-#splash img{width:140px;height:140px;border-radius:50%;box-shadow:0 0 30px #00f6ff}
-h1{letter-spacing:6px}
-#main{display:none}
-#tabs{display:flex;overflow-x:auto;background:#111;padding:10px}
-.tab{padding:10px 20px;margin-right:10px;background:#222;
-border-radius:8px;cursor:pointer;white-space:nowrap}
-.tab:hover{background:#00f6ff;color:#000}
-.msg{margin:15px;background:#111;padding:15px;border-radius:10px;
-box-shadow:0 0 10px #00f6ff44}
+body{background:#0f0f0f;color:#fff;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh}
+.box{background:#1a1a1a;padding:30px;border-radius:12px;width:300px}
+input,button{width:100%;padding:10px;margin-top:10px;border-radius:8px;border:none}
+button{background:#6c63ff;color:white;font-weight:bold}
+label{font-size:14px}
+</style>
+</head>
+<body>
+<form class="box" method="post">
+<h2>Selva Panel</h2>
+<input type="password" name="password" placeholder="Password" required>
+<label><input type="checkbox" name="remember"> Remember me</label>
+<button type="submit">Login</button>
+</form>
+</body>
+</html>
+"""
+
+@app.post("/login")
+def login(password: str = Form(...), remember: str = Form(None)):
+    if password != PASSWORD:
+        return RedirectResponse("/login", status_code=302)
+
+    res = RedirectResponse("/", status_code=302)
+    if remember:
+        res.set_cookie(COOKIE_NAME, "1", max_age=COOKIE_AGE)
+    else:
+        res.set_cookie(COOKIE_NAME, "1")
+    return res
+
+# ================== MAIN UI ==================
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    if not is_authed(request):
+        return RedirectResponse("/login", status_code=302)
+
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<title>Selva Massage</title>
+<style>
+body{margin:0;background:#0b0b0b;color:#fff;font-family:sans-serif}
+#splash{position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+#splash img{width:140px;height:140px;border-radius:50%}
+#top{padding:15px;border-bottom:1px solid #222;display:flex;gap:15px;overflow-x:auto}
+.country{cursor:pointer;white-space:nowrap}
+.msg{background:#151515;margin:10px;padding:12px;border-radius:10px}
+.hidden{display:none}
 </style>
 </head>
 <body>
 
 <div id="splash">
-  <img src="https://i.ibb.co/m1jd1Hx/image.jpg">
-  <h1>S E L V A Massage ⚡</h1>
+<img src="https://i.ibb.co/m1jd1Hx/image.jpg">
+<h2>selva massage ⚡</h2>
 </div>
 
-<div id="main">
-  <div id="tabs"></div>
-  <div id="content"></div>
-</div>
+<div id="top"></div>
+<div id="messages"></div>
 
 <script>
-setTimeout(()=>{
-  splash.style.display="none";
-  main.style.display="block";
-  loadCountries();
-},5000);
+setTimeout(()=>document.getElementById("splash").style.display="none",5000)
 
-function loadCountries(){
-  fetch("/countries").then(r=>r.json()).then(data=>{
-    tabs.innerHTML="";
-    data.forEach(c=>{
-      let d=document.createElement("div");
-      d.className="tab";
-      d.innerText=c;
-      d.onclick=()=>loadMessages(c);
-      tabs.appendChild(d);
-    });
-  });
-}
+fetch("/api/messages").then(r=>r.json()).then(data=>{
+  const top=document.getElementById("top")
+  const msgs=document.getElementById("messages")
+  const countries={}
 
-function loadMessages(country){
-  fetch("/messages/"+country).then(r=>r.json()).then(data=>{
-    content.innerHTML="";
-    if(data.length===0){
-      content.innerHTML="<p style='padding:20px'>No messages</p>";
+  data.forEach(m=>{
+    if(m.code){
+      countries[m.code]=m.country+" "+m.flag
     }
-    data.forEach(m=>{
-      content.innerHTML+=`<div class="msg">${m}</div>`;
-    });
-  });
-}
-</script>
+  })
 
+  for(const c in countries){
+    const d=document.createElement("div")
+    d.className="country"
+    d.innerText=countries[c]
+    d.onclick=()=>show(c)
+    top.appendChild(d)
+  }
+
+  window.show=(code)=>{
+    msgs.innerHTML=""
+    data.filter(m=>m.code==code).forEach(m=>{
+      const div=document.createElement("div")
+      div.className="msg"
+      div.innerText=m.text
+      msgs.appendChild(div)
+    })
+  }
+})
+</script>
 </body>
 </html>
 """
+
+# ================== API ==================
+@app.get("/api/messages")
+def api_messages():
+    return MESSAGES[-500:]
+
+# ================== RUN ==================
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8080)
