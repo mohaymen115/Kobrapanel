@@ -5,8 +5,8 @@ from telethon import TelegramClient, events
 import uvicorn
 
 # ================== CONFIG ==================
-API_ID = 34580956
-API_HASH = "3f04e1a1ea0c6a24c8b5d26d8ad425b2"
+API_ID = 30828166
+API_HASH = "272132c1323a4bb1fd6994d8d51977cf"
 SESSION_NAME = "selva_session"
 CHANNEL_ID = -1003808609180
 
