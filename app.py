@@ -1,78 +1,102 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+OTP Monitor Script - Console Version
+يجلب ويعرض رموز OTP مباشرة في الطرفية
+"""
+
 import os
-import logging
 import requests
 import re
 import json
-import threading
 import time
+import sys
 from datetime import datetime
-from flask import Flask, render_template_string, jsonify, request
 from dotenv import load_dotenv
 
-# ================== CONFIG ==================
+# ============================================
+# التحميل من .env والتكوين
+# ============================================
 load_dotenv()
 
-PANEL_URL = os.getenv("PANEL_URL", "http://198.135.52.238").rstrip("/")
-PANEL_USERNAME = os.getenv("PANEL_USERNAME", "gagaywb66")
-PANEL_PASSWORD = os.getenv("PANEL_PASSWORD", "gagaywb66")
-PORT = int(os.getenv("PORT", 8080))
-FETCH_INTERVAL = int(os.getenv("FETCH_INTERVAL", 10))
-MAX_MESSAGES = int(os.getenv("MAX_MESSAGES", 100))
+# إعدادات الاتصال - غيرها حسب بياناتك
+PANEL_URL = os.getenv('PANEL_URL', "http://198.135.52.238")
+PANEL_USERNAME = os.getenv('PANEL_USERNAME', "gagaywb66")
+PANEL_PASSWORD = os.getenv('PANEL_PASSWORD', "gagaywb66")
+REFRESH_INTERVAL = int(os.getenv('REFRESH_INTERVAL', 10))  # ثواني
+
 # ============================================
-
-# ================== LOGGING ==================
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
-
-# ================== DATA STORAGE ==================
-all_messages = []
-debug_logs = []
-seen_ids = set()
-
-bot_stats = {
-    "start_time": datetime.now().isoformat(),
-    "total_otps": 0,
-    "last_check": "Never",
-    "is_running": False,
-    "scraper_status": "⏳ Initializing",
-    "last_error": None,
-    "api_response": None
-}
-
-# ================== COUNTRY FLAGS ==================
+# أعلام الدول (للزينة)
+# ============================================
 COUNTRY_FLAGS = {
     'venezuela': '🇻🇪', 've': '🇻🇪', 'brazil': '🇧🇷', 'br': '🇧🇷',
     'argentina': '🇦🇷', 'ar': '🇦🇷', 'colombia': '🇨🇴', 'co': '🇨🇴',
-    'usa': '🇺🇸', 'us': '🇺🇸', 'united states': '🇺🇸',
-    'canada': '🇨🇦', 'ca': '🇨🇦', 'mexico': '🇲🇽', 'mx': '🇲🇽',
-    'uk': '🇬🇧', 'gb': '🇬🇧', 'united kingdom': '🇬🇧',
-    'germany': '🇩🇪', 'de': '🇩🇪', 'france': '🇫🇷', 'fr': '🇫🇷',
-    'italy': '🇮🇹', 'it': '🇮🇹', 'spain': '🇪🇸', 'es': '🇪🇸',
-    'russia': '🇷🇺', 'ru': '🇷🇺', 'india': '🇮🇳', 'in': '🇮🇳',
-    'china': '🇨🇳', 'cn': '🇨🇳', 'japan': '🇯🇵', 'jp': '🇯🇵',
-    'egypt': '🇪🇬', 'eg': '🇪🇬', 'morocco': '🇲🇦', 'ma': '🇲🇦',
-    'uae': '🇦🇪', 'ae': '🇦🇪', 'saudi': '🇸🇦', 'sa': '🇸🇦',
-    'australia': '🇦🇺', 'au': '🇦🇺',
+    'usa': '🇺🇸', 'us': '🇺🇸', 'canada': '🇨🇦', 'ca': '🇨🇦',
+    'uk': '🇬🇧', 'gb': '🇬🇧', 'germany': '🇩🇪', 'de': '🇩🇪',
+    'france': '🇫🇷', 'fr': '🇫🇷', 'egypt': '🇪🇬', 'eg': '🇪🇬',
+    'saudi': '🇸🇦', 'sa': '🇸🇦', 'uae': '🇦🇪', 'ae': '🇦🇪',
+    'morocco': '🇲🇦', 'ma': '🇲🇦', 'algeria': '🇩🇿', 'dz': '🇩🇿',
+    'tunisia': '🇹🇳', 'tn': '🇹🇳', 'libya': '🇱🇾', 'ly': '🇱🇾',
+    'jordan': '🇯🇴', 'jo': '🇯🇴', 'lebanon': '🇱🇧', 'lb': '🇱🇧',
+    'palestine': '🇵🇸', 'ps': '🇵🇸', 'iraq': '🇮🇶', 'iq': '🇮🇶',
+    'syria': '🇸🇾', 'sy': '🇸🇾', 'yemen': '🇾🇪', 'ye': '🇾🇪',
+    'kuwait': '🇰🇼', 'kw': '🇰🇼', 'qatar': '🇶🇦', 'qa': '🇶🇦',
+    'bahrain': '🇧🇭', 'bh': '🇧🇭', 'oman': '🇴🇲', 'om': '🇴🇲',
 }
 
-# ================== DEBUG FUNCTION ==================
-def add_debug(message):
-    """Add debug message with timestamp"""
-    timestamp = datetime.now().strftime('%H:%M:%S')
-    log = f"[{timestamp}] {message}"
-    debug_logs.insert(0, log)
-    if len(debug_logs) > 50:
-        debug_logs.pop()
-    logger.info(message)
+# ============================================
+# ألوان للطرفية (تعمل على Linux/Mac و Windows 10+)
+# ============================================
+class Colors:
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    MAGENTA = '\033[35m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    RESET = '\033[0m'
+    WHITE = '\033[97m'
+    
+    # خلفيات
+    BG_BLACK = '\033[40m'
+    BG_RED = '\033[41m'
+    BG_GREEN = '\033[42m'
+    BG_YELLOW = '\033[43m'
+    BG_BLUE = '\033[44m'
+    BG_MAGENTA = '\033[45m'
+    BG_CYAN = '\033[46m'
+    BG_WHITE = '\033[47m'
 
-# ================== HELPER FUNCTIONS ==================
-def mask_phone_number(phone):
-    """Mask phone number for privacy"""
+# ============================================
+# فلتر لمنع تكرار نفس الرسالة
+# ============================================
+class OTPFilter:
+    def __init__(self):
+        self.seen_ids = set()
+        self.max_size = 500  # حد أقصى للتخزين
+    
+    def is_new(self, msg_id):
+        if msg_id in self.seen_ids:
+            return False
+        self.seen_ids.add(msg_id)
+        # لو كبرت المجموعة ننظفها
+        if len(self.seen_ids) > self.max_size:
+            self.seen_ids = set(list(self.seen_ids)[-self.max_size//2:])
+        return True
+    
+    def clear(self):
+        self.seen_ids.clear()
+
+otp_filter = OTPFilter()
+
+# ============================================
+# إخفاء جزء من الرقم
+# ============================================
+def mask_phone(phone):
     if not phone or phone == 'Unknown':
         return 'Unknown'
     phone = str(phone).strip()
@@ -82,28 +106,35 @@ def mask_phone_number(phone):
         return f"{phone[:5]}•••{phone[-4:]}"
     return f"{phone[:4]}•••{phone[-4:]}"
 
-def extract_otp(content):
-    """Extract OTP from message content"""
-    if not content:
+# ============================================
+# استخراج OTP من النص
+# ============================================
+def extract_otp(text):
+    if not text:
         return 'N/A'
     
     patterns = [
-        r'(\d{4,8})',
-        r'(?:code|kode|otp|pin)[:\s]*(\d{4,8})',
         r'(\d{3}[-\s]?\d{3})',
         r'(\d{4}[-\s]?\d{4})',
+        r'(?:code|kode|otp|رمز|كود)[:\s]*(\d{4,8})',
+        r'(\d{6})',
+        r'(\d{4,8})',
+        r'(\d{3} \d{3})',
+        r'(\d{4} \d{4})',
     ]
     
     for pattern in patterns:
-        match = re.search(pattern, content, re.IGNORECASE)
+        match = re.search(pattern, text, re.IGNORECASE)
         if match:
             return match.group(1).replace(' ', '-')
     return 'N/A'
 
-def detect_service(content):
-    """Detect service from message content"""
-    if not content:
-        return 'SMS Service'
+# ============================================
+# كشف الخدمة من النص
+# ============================================
+def detect_service(text):
+    if not text:
+        return 'Unknown'
     
     services = {
         'whatsapp': 'WhatsApp', 'telegram': 'Telegram',
@@ -112,16 +143,20 @@ def detect_service(content):
         'tiktok': 'TikTok', 'snapchat': 'Snapchat',
         'paypal': 'PayPal', 'amazon': 'Amazon',
         'netflix': 'Netflix', 'spotify': 'Spotify',
+        'tinder': 'Tinder', 'uber': 'Uber',
+        'careem': 'Careem', 'talabat': 'Talabat',
     }
     
-    content_lower = content.lower()
+    text_lower = text.lower()
     for key, name in services.items():
-        if key in content_lower:
+        if key in text_lower:
             return name
     return 'SMS Service'
 
+# ============================================
+# الحصول على علم الدولة
+# ============================================
 def get_country_flag(country):
-    """Get flag emoji for country"""
     if not country:
         return '🌍'
     country_lower = country.lower().strip()
@@ -132,26 +167,82 @@ def get_country_flag(country):
             return flag
     return '🌍'
 
-# ================== PANEL API CLASS ==================
+# ============================================
+# فورمات الرسالة
+# ============================================
+def format_message(msg):
+    try:
+        # محتوى الرسالة
+        content = msg.get('content') or msg.get('message') or msg.get('text') or ''
+        
+        # استخراج OTP
+        otp = extract_otp(content)
+        
+        # الرقم
+        phone = msg.get('Number') or msg.get('number') or msg.get('phone') or 'Unknown'
+        
+        # الدولة
+        country = msg.get('country') or msg.get('Country') or ''
+        flag = get_country_flag(country)
+        
+        # الخدمة
+        service = msg.get('service') or msg.get('Service') or msg.get('sender') or detect_service(content)
+        
+        # الوقت
+        timestamp = msg.get('created_at') or msg.get('timestamp') or ''
+        if timestamp:
+            try:
+                # محاولة تحويل الصيغ المختلفة
+                if 'T' in str(timestamp):
+                    dt = datetime.strptime(str(timestamp)[:19], '%Y-%m-%dT%H:%M:%S')
+                else:
+                    dt = datetime.strptime(str(timestamp)[:19], '%Y-%m-%d %H:%M:%S')
+                timestamp = dt.strftime('%H:%M:%S')
+            except:
+                timestamp = datetime.now().strftime('%H:%M:%S')
+        else:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+        
+        # ID فريد
+        msg_id = msg.get('id') or msg.get('_id') or str(hash(content + phone + timestamp))
+        
+        return {
+            'otp': otp,
+            'phone': phone,
+            'phone_masked': mask_phone(phone),
+            'service': service,
+            'country': country,
+            'flag': flag,
+            'timestamp': timestamp,
+            'content': content[:150] + ('...' if len(content) > 150 else ''),
+            'id': msg_id
+        }
+    except Exception as e:
+        return None
+
+# ============================================
+# فئة الاتصال بالبانل
+# ============================================
 class PanelAPI:
-    def __init__(self):
-        self.base_url = PANEL_URL
-        self.username = PANEL_USERNAME
-        self.password = PANEL_PASSWORD
+    def __init__(self, base_url, username, password):
+        self.base_url = base_url.rstrip('/')
+        self.username = username
+        self.password = password
         self.token = None
-        self.session = requests.Session()
         self.logged_in = False
+        self.session = requests.Session()
         
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
             'Content-Type': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
         })
     
     def login(self):
-        """Login to panel and get token"""
+        """تسجيل الدخول للبانل"""
         try:
-            add_debug(f"🔐 Attempting login to {self.base_url}")
+            print(f"{Colors.YELLOW}🔐 جاري تسجيل الدخول إلى {self.base_url}...{Colors.RESET}")
             
             response = self.session.post(
                 f"{self.base_url}/api/auth/login",
@@ -161,514 +252,265 @@ class PanelAPI:
             
             if response.status_code == 200:
                 data = response.json()
-                
                 if 'token' in data:
                     self.token = data['token']
                     self.logged_in = True
                     self.session.headers['Authorization'] = f'Bearer {self.token}'
-                    bot_stats['scraper_status'] = '✅ Connected'
-                    add_debug("✅ Login successful!")
+                    print(f"{Colors.GREEN}✅ تم تسجيل الدخول بنجاح{Colors.RESET}")
+                    return True
+                elif 'access_token' in data:
+                    self.token = data['access_token']
+                    self.logged_in = True
+                    self.session.headers['Authorization'] = f'Bearer {self.token}'
+                    print(f"{Colors.GREEN}✅ تم تسجيل الدخول بنجاح{Colors.RESET}")
                     return True
                 else:
-                    add_debug(f"❌ No token in response")
+                    print(f"{Colors.RED}❌ لا يوجد token في الرد: {data}{Colors.RESET}")
             else:
-                add_debug(f"❌ Login failed: {response.status_code}")
+                print(f"{Colors.RED}❌ فشل تسجيل الدخول: {response.status_code}{Colors.RESET}")
+                print(f"{Colors.RED}الرد: {response.text[:200]}{Colors.RESET}")
             
-            bot_stats['scraper_status'] = '❌ Login failed'
             return False
             
+        except requests.exceptions.ConnectionError:
+            print(f"{Colors.RED}❌ خطأ في الاتصال: لا يمكن الوصول إلى {self.base_url}{Colors.RESET}")
+            return False
+        except requests.exceptions.Timeout:
+            print(f"{Colors.RED}❌ خطأ: انتهت مهلة الاتصال{Colors.RESET}")
+            return False
         except Exception as e:
-            add_debug(f"❌ Login error: {str(e)}")
-            bot_stats['scraper_status'] = f'❌ Error'
-            bot_stats['last_error'] = str(e)
+            print(f"{Colors.RED}❌ خطأ في تسجيل الدخول: {str(e)}{Colors.RESET}")
             return False
     
     def fetch_messages(self):
-        """Fetch messages from panel API"""
+        """جلب الرسائل من البانل"""
         if not self.logged_in:
-            add_debug("⚠️ Not logged in, attempting login...")
+            print(f"{Colors.YELLOW}⚠️ غير مسجل الدخول، جاري تسجيل الدخول...{Colors.RESET}")
             if not self.login():
                 return []
         
         try:
-            url = f"{self.base_url}/api/sms?limit=100"
-            response = self.session.get(url, timeout=15)
+            # تجربة مسارات مختلفة للـ API
+            endpoints = [
+                f"{self.base_url}/api/sms",
+                f"{self.base_url}/api/messages",
+                f"{self.base_url}/api/otp",
+                f"{self.base_url}/api/inbox",
+            ]
+            
+            for endpoint in endpoints:
+                try:
+                    response = self.session.get(
+                        f"{endpoint}?limit=50",
+                        timeout=10
+                    )
+                    
+                    if response.status_code == 200:
+                        break
+                except:
+                    continue
+            else:
+                # إذا لم ينجح أي من المسارات، نجرب المسار الأصلي مرة أخرى
+                response = self.session.get(
+                    f"{self.base_url}/api/sms?limit=50",
+                    timeout=10
+                )
             
             if response.status_code == 401:
-                add_debug("⚠️ Token expired, re-logging...")
+                print(f"{Colors.YELLOW}⚠️ التوكن منتهي، إعادة تسجيل الدخول...{Colors.RESET}")
                 self.logged_in = False
                 if not self.login():
                     return []
-                response = self.session.get(url, timeout=15)
+                response = self.session.get(
+                    f"{self.base_url}/api/sms?limit=50",
+                    timeout=10
+                )
             
             if response.status_code != 200:
-                add_debug(f"❌ Failed to fetch: {response.status_code}")
+                print(f"{Colors.RED}❌ فشل جلب الرسائل: {response.status_code}{Colors.RESET}")
                 return []
-            
-            # Save response for debugging
-            bot_stats['api_response'] = response.text[:500]
             
             try:
                 data = response.json()
             except:
-                add_debug("❌ Invalid JSON response")
+                print(f"{Colors.RED}❌ الرد ليس JSON صالح{Colors.RESET}")
                 return []
             
-            # Handle different response formats
+            # استخراج الرسائل حسب نوع الرد
+            messages = []
             if isinstance(data, list):
                 messages = data
             elif isinstance(data, dict):
-                messages = data.get('sms', data.get('messages', data.get('data', [])))
+                # محاولة استخراج الرسائل من مفاتيح مختلفة
+                messages = (data.get('sms') or data.get('messages') or 
+                           data.get('data') or data.get('items') or [])
             else:
                 messages = []
             
+            # تنسيق الرسائل
             formatted = []
             for msg in messages:
-                formatted_msg = self._format_message(msg)
-                if formatted_msg:
-                    formatted.append(formatted_msg)
+                f = format_message(msg)
+                if f and f['otp'] != 'N/A':  # فقط الرسائل التي تحتوي على OTP
+                    formatted.append(f)
             
             return formatted
             
         except Exception as e:
-            add_debug(f"❌ Fetch error: {str(e)}")
-            bot_stats['last_error'] = str(e)
+            print(f"{Colors.RED}❌ خطأ في جلب الرسائل: {str(e)}{Colors.RESET}")
             return []
-    
-    def _format_message(self, msg):
-        """Format raw message to standard format"""
-        try:
-            # Extract content
-            content = msg.get('content') or msg.get('message') or msg.get('text', '')
-            
-            # Extract OTP
-            otp = extract_otp(content)
-            
-            # Extract phone
-            phone = msg.get('number') or msg.get('phone') or msg.get('Number', 'Unknown')
-            
-            # Extract country
-            country = msg.get('country') or msg.get('Country') or ''
-            country_flag = get_country_flag(country)
-            
-            # Extract service
-            service = (
-                msg.get('service') or 
-                msg.get('sender') or 
-                detect_service(content)
-            )
-            
-            # Extract timestamp
-            timestamp = msg.get('created_at') or msg.get('timestamp') or ''
-            if timestamp:
-                try:
-                    dt = datetime.strptime(str(timestamp)[:19], '%Y-%m-%dT%H:%M:%S')
-                    timestamp = dt.strftime('%Y-%m-%d %I:%M %p')
-                except:
-                    timestamp = datetime.now().strftime('%Y-%m-%d %I:%M %p')
-            else:
-                timestamp = datetime.now().strftime('%Y-%m-%d %I:%M %p')
-            
-            # Generate unique ID
-            msg_id = msg.get('id') or msg.get('_id') or str(hash(str(msg)))
-            
-            return {
-                'id': msg_id,
-                'otp': otp,
-                'phone': phone,
-                'phone_masked': mask_phone_number(phone),
-                'service': service,
-                'country': country,
-                'country_flag': country_flag,
-                'timestamp': timestamp,
-                'raw_message': content[:200] if content else ''
-            }
-        except Exception as e:
-            add_debug(f"❌ Format error: {str(e)}")
-            return None
 
-# ================== INITIALIZE API ==================
-panel = PanelAPI()
+# ============================================
+# طباعة رأس البرنامج
+# ============================================
+def print_header():
+    os.system('clear' if os.name == 'posix' else 'cls')
+    print(f"{Colors.BG_BLUE}{Colors.BOLD}{Colors.WHITE}╔══════════════════════════════════════════════════════════╗{Colors.RESET}")
+    print(f"{Colors.BG_BLUE}{Colors.BOLD}{Colors.WHITE}║                📱 OTP MONITOR - CONSOLE                  ║{Colors.RESET}")
+    print(f"{Colors.BG_BLUE}{Colors.BOLD}{Colors.WHITE}║                  النسخة المباشرة v1.0                     ║{Colors.RESET}")
+    print(f"{Colors.BG_BLUE}{Colors.BOLD}{Colors.WHITE}╚══════════════════════════════════════════════════════════╝{Colors.RESET}")
+    print(f"{Colors.CYAN}⏱️  آخر تحديث: {datetime.now().strftime('%H:%M:%S')}{Colors.RESET}")
+    print(f"{Colors.YELLOW}🔄 التحديث كل {REFRESH_INTERVAL} ثانية | اضغط Ctrl+C للخروج{Colors.RESET}")
+    print(f"{Colors.MAGENTA}════════════════════════════════════════════════════════════{Colors.RESET}")
 
-# ================== BACKGROUND WORKER ==================
-def background_worker():
-    """Background thread to fetch messages periodically"""
-    bot_stats['is_running'] = True
-    add_debug("🚀 Background worker started")
+# ============================================
+# طباعة رسالة OTP بشكل جميل
+# ============================================
+def print_otp_message(msg, index):
+    print(f"\n{Colors.WHITE}{Colors.BG_MAGENTA} 🔔 رسالة جديدة رقم {index} في {msg['timestamp']} {Colors.RESET}")
+    print(f"{Colors.CYAN}┌─────────────────────────────────────────────────────────────{Colors.RESET}")
+    print(f"{Colors.YELLOW}│ {msg['flag']} الدولة   : {msg['country'] or 'غير معروفة'}{Colors.RESET}")
+    print(f"{Colors.GREEN}│ 📞 الرقم    : {msg['phone_masked']}{Colors.RESET}")
+    print(f"{Colors.BLUE}│ 🔧 الخدمة   : {msg['service']}{Colors.RESET}")
+    print(f"{Colors.MAGENTA}│ 🔑 OTP      : {Colors.BOLD}{Colors.GREEN}{msg['otp']}{Colors.RESET}")
+    print(f"{Colors.WHITE}│ 📝 النص     : {msg['content'][:100]}{Colors.RESET}")
+    print(f"{Colors.CYAN}└─────────────────────────────────────────────────────────────{Colors.RESET}")
+
+# ============================================
+# حفظ في ملف
+# ============================================
+def save_to_file(msg):
+    try:
+        filename = f"otp_log_{datetime.now().strftime('%Y-%m-%d')}.txt"
+        with open(filename, 'a', encoding='utf-8') as f:
+            f.write(f"[{msg['timestamp']}] {msg['flag']} {msg['service']} - {msg['otp']} - {msg['phone']}\n")
+            f.write(f"   {msg['content']}\n")
+            f.write("-" * 50 + "\n")
+    except:
+        pass
+
+# ============================================
+# الدالة الرئيسية
+# ============================================
+def main():
+    # إنشاء الاتصال
+    api = PanelAPI(PANEL_URL, PANEL_USERNAME, PANEL_PASSWORD)
     
-    # Initial login
-    panel.login()
+    print_header()
+    print(f"{Colors.YELLOW}🔌 جاري الاتصال بالبانل...{Colors.RESET}")
     
-    while True:
-        try:
-            # Fetch messages
-            messages = panel.fetch_messages()
-            bot_stats['last_check'] = datetime.now().strftime('%H:%M:%S')
+    if not api.login():
+        print(f"{Colors.RED}❌ فشل الاتصال بالبانل. تحقق من:{Colors.RESET}")
+        print(f"{Colors.RED}   1. الرابط: {PANEL_URL}{Colors.RESET}")
+        print(f"{Colors.RED}   2. اسم المستخدم: {PANEL_USERNAME}{Colors.RESET}")
+        print(f"{Colors.RED}   3. كلمة المرور: {'*' * len(PANEL_PASSWORD)}{Colors.RESET}")
+        print(f"{Colors.YELLOW}💡 يمكنك تعديل البيانات في أول الملف أو في ملف .env{Colors.RESET}")
+        sys.exit(1)
+    
+    # تخزين الرسائل
+    all_messages = []
+    total_otps = 0
+    
+    # محاولة جلب أولي
+    try:
+        print(f"{Colors.YELLOW}🔍 جاري جلب الرسائل...{Colors.RESET}")
+        messages = api.fetch_messages()
+        
+        for msg in messages:
+            if otp_filter.is_new(msg['id']):
+                all_messages.insert(0, msg)
+                total_otps += 1
+                save_to_file(msg)
+        
+        if all_messages:
+            print(f"{Colors.GREEN}✅ تم جلب {len(all_messages)} رسالة{Colors.RESET}")
+            for i, msg in enumerate(all_messages[:5], 1):
+                print_otp_message(msg, i)
+        else:
+            print(f"{Colors.YELLOW}⚠️ لا توجد رسائل OTP حالياً{Colors.RESET}")
+    
+    except Exception as e:
+        print(f"{Colors.RED}❌ خطأ: {str(e)}{Colors.RESET}")
+    
+    # الحلقة الرئيسية
+    try:
+        cycle_count = 0
+        while True:
+            time.sleep(REFRESH_INTERVAL)
+            cycle_count += 1
             
-            # Process new messages
+            print_header()
+            print(f"{Colors.YELLOW}🔍 جاري التحقق من الرسائل الجديدة... (الدورة {cycle_count}){Colors.RESET}")
+            
+            messages = api.fetch_messages()
             new_count = 0
+            
             for msg in messages:
-                msg_id = msg['id']
-                
-                if msg_id not in seen_ids:
-                    seen_ids.add(msg_id)
-                    
-                    # Only add if OTP is valid
-                    if msg['otp'] != 'N/A':
-                        all_messages.insert(0, msg)
-                        bot_stats['total_otps'] += 1
-                        new_count += 1
+                if otp_filter.is_new(msg['id']):
+                    all_messages.insert(0, msg)
+                    total_otps += 1
+                    new_count += 1
+                    save_to_file(msg)
             
             if new_count > 0:
-                add_debug(f"📨 {new_count} new OTPs received")
+                print(f"{Colors.GREEN}✅ تم استلام {new_count} رسالة جديدة{Colors.RESET}")
+                # عرض الرسائل الجديدة
+                for i in range(min(new_count, 5)):
+                    print_otp_message(all_messages[i], i+1)
+            else:
+                print(f"{Colors.YELLOW}⏳ لا توجد رسائل جديدة{Colors.RESET}")
             
-            # Keep only latest messages
-            del all_messages[MAX_MESSAGES:]
+            # إحصائيات
+            print(f"\n{Colors.CYAN}📊 الإحصائيات:{Colors.RESET}")
+            print(f"   إجمالي OTP: {Colors.GREEN}{total_otps}{Colors.RESET}")
+            print(f"   عدد الرسائل المخزنة: {len(all_messages)}")
             
-        except Exception as e:
-            bot_stats['last_error'] = str(e)
-            add_debug(f"❌ Worker error: {str(e)}")
-        
-        time.sleep(FETCH_INTERVAL)
+            # عرض آخر 5 رسائل
+            if all_messages:
+                print(f"\n{Colors.MAGENTA}📋 آخر 5 رسائل:{Colors.RESET}")
+                for i, msg in enumerate(all_messages[:5], 1):
+                    print(f"   {i}. [{msg['timestamp']}] {msg['flag']} {msg['service']}: {Colors.GREEN}{msg['otp']}{Colors.RESET}")
+            
+            # معلومات إضافية
+            uptime = datetime.now() - bot_start_time
+            hours = uptime.seconds // 3600
+            minutes = (uptime.seconds % 3600) // 60
+            print(f"\n{Colors.BLUE}⏰ وقت التشغيل: {hours}س {minutes}د{Colors.RESET}")
+    
+    except KeyboardInterrupt:
+        print(f"\n\n{Colors.YELLOW}👋 تم إيقاف البرنامج. وداعاً!{Colors.RESET}")
+        print(f"{Colors.GREEN}📊 إحصائيات الجلسة:{Colors.RESET}")
+        print(f"   إجمالي OTP: {total_otps}")
+        print(f"   الرسائل المخزنة: {len(all_messages)}")
+        sys.exit(0)
 
-# ================== HTML TEMPLATE ==================
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📱 OTP KING PANEL</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-            min-height: 100vh;
-            color: #fff;
-        }
-        
-        .header {
-            background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
-            padding: 20px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        
-        .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        
-        .logo { font-size: 24px; font-weight: 700; }
-        
-        .stats-bar {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .stat-item {
-            background: rgba(255,255,255,0.1);
-            padding: 10px 20px;
-            border-radius: 10px;
-        }
-        
-        .stat-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: #00ff88;
-        }
-        
-        .stat-label {
-            font-size: 12px;
-            color: #aaa;
-        }
-        
-        .status-badge {
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-        }
-        
-        .status-online {
-            background: rgba(0,255,136,0.2);
-            color: #00ff88;
-        }
-        
-        .status-offline {
-            background: rgba(255,68,68,0.2);
-            color: #ff4444;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        .btn {
-            padding: 12px 24px;
-            border-radius: 10px;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            margin: 5px;
-            transition: all 0.3s;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #00ff88, #00cc6a);
-            color: #000;
-        }
-        
-        .btn-secondary {
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-        }
-        
-        .btn-danger {
-            background: #ff4444;
-            color: #fff;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            opacity: 0.9;
-        }
-        
-        .messages-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        
-        .message-card {
-            background: rgba(255,255,255,0.08);
-            border-radius: 16px;
-            padding: 20px;
-            border: 1px solid rgba(255,255,255,0.1);
-            animation: fadeIn 0.5s ease;
-            transition: transform 0.3s;
-        }
-        
-        .message-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,255,136,0.1);
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        
-        .country-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .country-flag {
-            font-size: 32px;
-        }
-        
-        .country-name {
-            font-weight: 600;
-        }
-        
-        .service-badge {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-        }
-        
-        .otp-section {
-            background: rgba(0,255,136,0.1);
-            border: 2px solid rgba(0,255,136,0.3);
-            border-radius: 12px;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
-        }
-        
-        .otp-code {
-            font-size: 28px;
-            font-weight: 700;
-            color: #00ff88;
-            letter-spacing: 3px;
-            font-family: monospace;
-        }
-        
-        .copy-btn {
-            background: rgba(0,255,136,0.2);
-            border: 1px solid #00ff88;
-            padding: 8px 16px;
-            border-radius: 8px;
-            color: #00ff88;
-            cursor: pointer;
-            margin-top: 10px;
-            transition: all 0.3s;
-        }
-        
-        .copy-btn:hover {
-            background: #00ff88;
-            color: #000;
-        }
-        
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        
-        .info-label {
-            color: #888;
-            font-size: 13px;
-        }
-        
-        .info-value {
-            color: #fff;
-            font-size: 13px;
-        }
-        
-        .message-content {
-            background: rgba(0,0,0,0.2);
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 15px;
-            font-size: 13px;
-            color: #aaa;
-            max-height: 80px;
-            overflow-y: auto;
-        }
-        
-        .timestamp {
-            text-align: right;
-            font-size: 11px;
-            color: #666;
-            margin-top: 10px;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 60px;
-            color: #888;
-            grid-column: 1/-1;
-        }
-        
-        .empty-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-        }
-        
-        .debug-panel {
-            background: rgba(0,0,0,0.5);
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            font-family: monospace;
-            font-size: 12px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        .debug-log {
-            padding: 5px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .refresh-indicator {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.8);
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-size: 12px;
-            z-index: 1000;
-        }
-        
-        .pulse {
-            width: 10px;
-            height: 10px;
-            background: #00ff88;
-            border-radius: 50%;
-            display: inline-block;
-            animation: pulse 2s infinite;
-            margin-right: 10px;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin: 20px 0;
-        }
-        
-        .tab {
-            padding: 10px 20px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .tab.active {
-            background: #00ff88;
-            color: #000;
-        }
-        
-        .tab:hover {
-            background: rgba(255,255,255,0.2);
-        }
-        
-        @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                text-align: center;
-            }
-            .messages-grid {
-                grid-template-columns: 1fr;
-            }
-            .refresh-indicator {
-                bottom: 10px;
-                right: 10px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <header class="header">
-        <div class="header-content">
-            <div class="logo">📱 OTP KING PANEL</div>
-            
-            <div class="stats-bar">
-                <div class="stat-item">
-                    <div class="stat-value">{{ stats.total_otps }}</div>
-                    <div class="stat-label">Total OTPs</div>
-                </div>
-                <div class="stat-item">
-                    <div class
+# ============================================
+# متغيرات عامة
+# ============================================
+bot_start_time = datetime.now()
+
+# ============================================
+# نقطة البداية
+# ============================================
+if __name__ == "__main__":
+    # التحقق من وجود المكتبات المطلوبة
+    try:
+        import requests
+        from dotenv import load_dotenv
+    except ImportError as e:
+        print("❌ المكتبات المطلوبة غير مثبتة!")
+        print("📦 قم بتثبيتها باستخدام:")
+        print("   pip install requests python-dotenv")
+        sys.exit(1)
+    
+    main()
