@@ -1,4 +1,3 @@
-fastapi
-uvicorn
-telethon
-python-multipart
+flask
+requests
+python-dotenv
