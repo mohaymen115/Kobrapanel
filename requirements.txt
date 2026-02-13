@@ -12,3 +12,4 @@ idna==3.6
 urllib3==2.1.0
 click==8.1.7
 blinker==1.7.0
+uvicorn
