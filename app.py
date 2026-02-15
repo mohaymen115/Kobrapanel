@@ -1955,7 +1955,8 @@ def background_monitor():
 
 @app.route('/')
 def index():
-    return render_template_string(VIDEO_INTRO)
+    return redirect(url_for('login_page'))
+    
 
 @app.route('/login', methods=['GET', 'POST'])
 def login_page():
