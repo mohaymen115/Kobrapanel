@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IVASMS Auto Range Add</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <!-- Authentication Overlay -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-box">
+            <div class="auth-header">
+                <h2>🔐 IVASMS Extension</h2>
+                <p class="auth-subtitle">Authentication Required</p>
+            </div>
+
+            <div id="auth-news" class="auth-news">
+                Loading...
+            </div>
+
+            <div class="auth-form">
+                <input type="password" id="auth-password" class="auth-input" placeholder="Enter Password" autofocus>
+                <button id="auth-submit" class="auth-button">🔓 Unlock Extension</button>
+            </div>
+
+            <div id="auth-error" class="auth-error" style="display: none;"></div>
+
+            <div class="auth-info">
+                <p>For password join channel or contact developer</p>
+                <a href="https://t.me/+nkP5mnsbeDE1NjFl" target="_blank" class="auth-channel-link">
+                    📱 Join Telegram Channel
+                </a>
+            </div>
+
+            <div class="auth-footer">
+                <p>Dev: Siam | <a href="https://t.me/SiamDeveloper1" target="_blank">@SiamDeveloper1</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="main-container">
+        <div class="header">
+            <h1>🚀 IVASMS Auto Range Add</h1>
+            <p class="subtitle">Automate everything!</p>
+            <p class="developer-credit">Dev: Siam | TG: <a href="https://t.me/SiamDeveloper1"
+                    target="_blank">@SiamDeveloper1</a></p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="add-numbers">
+                <span>➕ Add</span>
+            </button>
+            <button class="tab-btn" data-tab="sms-extractor">
+                <span>📱 SMS</span>
+            </button>
+            <button class="tab-btn" data-tab="return-numbers">
+                <span>↩️ Return</span>
+            </button>
+            <button class="tab-btn" data-tab="messages">
+                <span>💬 Messages</span>
+            </button>
+            <button class="tab-btn" data-tab="range-finder">
+                <span>📊 Finder</span>
+            </button>
+        </div>
+
+        <!-- Add Numbers Tab -->
+        <div class="tab-content active" id="add-numbers-tab">
+            <div class="input-section">
+                <label for="numbers-input">Enter Test Numbers (one per line):</label>
+                <textarea id="numbers-input" placeholder="992872119469&#10;6281519944473&#10;966597304818&#10;..."
+                    rows="8"></textarea>
+
+                <div class="options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="delay-checkbox" checked>
+                        <span>Add delay between requests (recommended)</span>
+                    </label>
+                    <div class="delay-input">
+                        <input type="number" id="delay-value" value="1000" min="500" max="5000" step="100">
+                        <span>ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="start-btn" class="btn btn-primary">
+                    <span class="btn-text">Start Adding</span>
+                    <span class="spinner" style="display: none;"></span>
+                </button>
+                <button id="stop-btn" class="btn btn-secondary" style="display: none;">Stop</button>
+            </div>
+
+            <div class="progress-section" style="display: none;">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <p class="progress-text" id="progress-text">0 / 0 processed</p>
+            </div>
+
+            <!-- Activity Log - Only in Add Numbers Tab -->
+            <div class="log-section">
+                <div class="log-header">
+                    <h3>Activity Log</h3>
+                    <button id="clear-log" class="btn-clear">Clear</button>
+                </div>
+                <div id="log-output"></div>
+            </div>
+
+            <!-- Summary - Only in Add Numbers Tab -->
+            <div class="summary-section">
+                <h3>📊 Summary</h3>
+                <div class="summary-stats">
+                    <div class="stat-item success-stat">
+                        <div class="stat-icon">✓</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="success-count">0</div>
+                            <div class="stat-label">successful</div>
+                        </div>
+                    </div>
+                    <div class="stat-item error-stat">
+                        <div class="stat-icon">✗</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="failed-count">0</div>
+                            <div class="stat-label">failed</div>
+                        </div>
+                    </div>
+                    <div class="stat-item info-stat">
+                        <div class="stat-icon">📝</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="total-count">0</div>
+                            <div class="stat-label">total</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export Button -->
+            <div style="margin: 16px 0;">
+                <button id="export-all-numbers" class="btn btn-success" style="width: 100%;">
+                    📥 Export All Numbers
+                </button>
+            </div>
+        </div>
+
+        <!-- SMS Extractor Tab -->
+        <div class="tab-content" id="sms-extractor-tab">
+            <div class="input-section">
+                <div class="sms-header">
+                    <h3 class="section-title">📱 SMS Number Extractor</h3>
+                    <button id="sms-refresh-btn" class="btn-small">🔄 Refresh</button>
+                </div>
+                <p class="hint">Extract numbers from SMS history table</p>
+
+                <div id="sms-loading" class="empty-state" style="display: none;">⏳ Loading...</div>
+
+                <div id="sms-content" style="display: none;">
+                    <div class="stats-box">
+                        <div class="stat-item">
+                            <span>Total:</span>
+                            <strong id="sms-count">0</strong>
+                        </div>
+                        <div class="stat-item">
+                            <span>Unique:</span>
+                            <strong id="sms-unique">0</strong>
+                        </div>
+                    </div>
+                    <div class="number-list" id="sms-number-list"></div>
+                    <button id="sms-copy-all" class="btn btn-primary">📋 Copy All</button>
+                </div>
+
+                <div id="sms-empty" class="empty-state">
+                    ⚠️ No numbers found<br>
+                    <span class="hint">Try refreshing or check SMS history page</span>
+                </div>
+
+                <p style="text-align: center; color: #718096; font-size: 10px; margin-top: 12px; opacity: 0.7;">Credit:
+                    Nill Vaiya</p>
+            </div>
+        </div>
+
+        <!-- Return Numbers Tab -->
+        <div class="tab-content" id="return-numbers-tab">
+            <div class="input-section">
+                <h3 class="section-title">↩️ Bulk Return Automation</h3>
+                <p class="hint">Auto-click return buttons repeatedly</p>
+
+                <div class="return-info">
+                    <p class="info-text">
+                        <span class="info-icon">⚙️</span>
+                        This will automatically click "Bulk Return" and confirm "Yes" repeatedly.
+                    </p>
+                </div>
+
+                <div class="row">
+                    <label for="return-iterations">Number of iterations:</label>
+                    <input type="number" id="return-iterations" min="1" max="50" value="7">
+                </div>
+            </div>
+
+            <div class="actions button-row">
+                <button id="return-start-btn" class="btn btn-success">
+                    <span>▶️ Start Automation</span>
+                </button>
+                <button id="return-stop-btn" class="btn btn-danger">
+                    <span>⏹ Stop</span>
+                </button>
+            </div>
+
+            <div id="return-status" class="status-box show">
+                <div class="info">✓ Ready. Press ▶️ to begin automated returns.</div>
+            </div>
+
+            <p style="text-align: center; color: #718096; font-size: 10px; margin-top: 12px; opacity: 0.7;">Credit: Nill
+                Vaiya</p>
+        </div>
+
+        <!-- Messages Tab -->
+        <div class="tab-content" id="messages-tab">
+            <div class="input-section">
+                <div class="sms-header">
+                    <h3 class="section-title">💬 Message Collector</h3>
+                    <button id="msg-collect-btn" class="btn-small">🔄 Collect</button>
+                </div>
+                <p class="hint">Collect all SMS messages from selected date range</p>
+
+                <div class="row">
+                    <div class="col-6">
+                        <label for="msg-start-date">Start Date:</label>
+                        <input type="date" id="msg-start-date" class="form-control">
+                    </div>
+                    <div class="col-6">
+                        <label for="msg-end-date">End Date:</label>
+                        <input type="date" id="msg-end-date" class="form-control">
+                    </div>
+                </div>
+
+                <div id="msg-stats" class="stats-box" style="display: none; margin-top: 16px;">
+                    <div class="stat-item">
+                        <span>Total Messages:</span>
+                        <strong id="msg-total">0</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>Ranges:</span>
+                        <strong id="msg-ranges">0</strong>
+                    </div>
+                </div>
+
+                <div id="msg-loading" class="empty-state" style="display: none;">⏳ Collecting messages...</div>
+
+                <div id="msg-content" style="display: none; margin-top: 16px;">
+                    <!-- History Selector -->
+                    <div id="msg-history-selector" style="display: none; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: flex-end; gap: 8px;">
+                            <div style="flex: 1;">
+                                <label
+                                    style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px;">Collection
+                                    History:</label>
+                                <select class="form-control">
+                                    <option>Select a collection...</option>
+                                </select>
+                            </div>
+                            <button id="msg-clear-history" class="btn btn-danger"
+                                style="height: 38px; white-space: nowrap;">
+                                🗑️ Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="message-list" id="msg-list"></div>
+
+                    <!-- Range Filter -->
+                    <div id="msg-range-filter"
+                        style="display: none; margin-top: 16px; padding: 12px; background: #f7fafc; border-radius: 8px;">
+                        <label
+                            style="display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #4a5568;">
+                            Filter by Range (uncheck to exclude):
+                        </label>
+                        <div id="msg-range-list" style="max-height: 150px; overflow-y: auto;"></div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <label for="msg-format"
+                            style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 8px;">Export
+                            Format:</label>
+                        <select id="msg-format" class="form-control" style="margin-bottom: 12px;">
+                            <option value="number-otp">number-otp (Default)</option>
+                            <option value="number-otp-message">number-otp-message</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 12px;">
+                        <button id="msg-copy-all" class="btn btn-primary" style="flex: 1;">📋 Copy All</button>
+                        <button id="msg-export-txt" class="btn btn-success" style="flex: 1;">📄 TXT</button>
+                        <button id="msg-export-csv" class="btn btn-success" style="flex: 1;">📊 CSV</button>
+                        <button id="msg-export-json" class="btn btn-secondary" style="flex: 1;">🔧 JSON</button>
+                    </div>
+                </div>
+
+                <div id="msg-empty" class="empty-state">
+                    📭 No messages collected yet<br>
+                    <span class="hint">Select dates and click Collect</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Range Finder Tab -->
+        <div id="range-finder-tab" class="tab-content">
+            <div class="card" style="padding: 20px;">
+                <h2>📊 Range Finder - Message History Analyzer</h2>
+                <p style="color: #718096; font-size: 14px; margin-bottom: 20px;">
+                    Analyze message patterns and find top ranges with most messages using DataTables API
+                </p>
+
+                <div style="background: #f7fafc; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <h3 style="font-size: 14px; color: #4a5568; margin-bottom: 8px;">Features:</h3>
+                    <ul style="margin-left: 20px; color: #718096; font-size: 13px; line-height: 1.8;">
+                        <li>Search by Range Name (e.g., "IVORY COAST")</li>
+                        <li>Filter by SID (Facebook, Instagram, etc.)</li>
+                        <li>Analyze last X hours of messages</li>
+                        <li>View top ranges by message count</li>
+                        <li>Searchable data table with filters</li>
+                    </ul>
+                </div>
+
+                <button id="open-range-finder" class="btn btn-primary" style="width: 100%; padding: 14px;">
+                    🚀 Open Range Finder Analyzer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script src="url-utils.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>
