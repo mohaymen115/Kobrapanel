@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Selva Card</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <img src="https://i.ibb.co/qLQpfj90/logo.png" class="logo">
+  <h2>Selva Card</h2>
+  <a href="https://t.me/selva_card" class="join">انضم ل قناتنا</a>
+</header>
+
+<div id="posts"></div>
+
+<script>
+function loadMessages(){
+fetch("/api/messages")
+.then(res => res.json())
+.then(data => {
+  let html = "";
+  data.forEach(msg => {
+    html += `
+      <div class="card ${msg.source}">
+        <p>${msg.text}</p>
+        <span>${msg.date}</span>
+      </div>
+    `;
+  });
+  document.getElementById("posts").innerHTML = html;
+});
+}
+
+loadMessages();
+setInterval(loadMessages, 30000);
+</script>
+
+</body>
+</html>
+
